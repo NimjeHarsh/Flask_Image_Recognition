@@ -29,6 +29,6 @@ jobs:
         run: |
           python -m pylint app.py model.py
 
-       - name: Run pytest
+      - name: Run pytest
         run: |
           python -m pytest -v

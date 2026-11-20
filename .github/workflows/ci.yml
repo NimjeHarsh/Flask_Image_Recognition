@@ -8,6 +8,8 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      FLASK_SECRET_KEY: "ci-only-test-key-not-for-production-2026"
 
     steps:
       - name: Checkout repository
@@ -27,6 +29,6 @@ jobs:
         run: |
           python -m pylint app.py model.py
 
-      - name: Run pytest
+       - name: Run pytest
         run: |
-          python -m pytest tests/ -v
+          python -m pytest -v

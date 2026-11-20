@@ -1,9 +1,15 @@
 
 """Automated tests for the Flask application."""
 
+import re
+from io import BytesIO
+from unittest.mock import patch
+
 import pytest
+from PIL import Image
 
 from app import app
+from model import preprocess_img
 
 
 @pytest.fixture
@@ -14,6 +20,17 @@ def client():
         yield test_client
 
 
+def get_csrf_token(client):
+    """Retrieve the CSRF token from the upload form."""
+    response = client.get("/")
+    match = re.search(
+        rb'name="csrf_token"\s+value="([^"]+)"',
+        response.data,
+    )
+    assert match is not None
+    return match.group(1).decode("utf-8")
+
+
 def test_home_page(client):
     """Verify that the home page loads successfully."""
     response = client.get("/")
@@ -21,13 +38,14 @@ def test_home_page(client):
     assert response.status_code == 200
     assert b"<html" in response.data.lower()
 
-from io import BytesIO
-from unittest.mock import patch
-
 
 def test_missing_upload(client):
     """Verify that a missing file returns an error message."""
-    response = client.post("/prediction", data={})
+    token = get_csrf_token(client)
+    response = client.post(
+        "/prediction",
+        data={"csrf_token": token},
+    )
 
     assert response.status_code == 200
     assert b"File cannot be processed." in response.data
@@ -35,10 +53,12 @@ def test_missing_upload(client):
 
 def test_invalid_image(client):
     """Verify that invalid image data is rejected."""
+    token = get_csrf_token(client)
     response = client.post(
         "/prediction",
         data={
-            "file": (BytesIO(b"not a real image"), "invalid.jpg")
+            "csrf_token": token,
+            "file": (BytesIO(b"not a real image"), "invalid.jpg"),
         },
         content_type="multipart/form-data",
     )
@@ -49,6 +69,8 @@ def test_invalid_image(client):
 
 def test_valid_prediction(client):
     """Verify that a valid image produces a prediction."""
+    token = get_csrf_token(client)
+
     with patch("app.preprocess_img") as mock_preprocess, \
          patch("app.predict_result", return_value=5):
 
@@ -57,7 +79,8 @@ def test_valid_prediction(client):
         response = client.post(
             "/prediction",
             data={
-                "file": (BytesIO(b"sample image"), "sample.jpg")
+                "csrf_token": token,
+                "file": (BytesIO(b"sample image"), "sample.jpg"),
             },
             content_type="multipart/form-data",
         )
@@ -65,8 +88,22 @@ def test_valid_prediction(client):
     assert response.status_code == 200
     assert b"5" in response.data
 
-from PIL import Image
-from model import preprocess_img
+
+def test_missing_csrf_token(client):
+    """Reject an upload request without a CSRF token."""
+    response = client.post("/prediction", data={})
+
+    assert response.status_code == 400
+
+
+def test_invalid_csrf_token(client):
+    """Reject an upload request with an invalid CSRF token."""
+    response = client.post(
+        "/prediction",
+        data={"csrf_token": "invalid-token"},
+    )
+
+    assert response.status_code == 400
 
 
 def test_image_preprocessing():

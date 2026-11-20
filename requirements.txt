@@ -8,3 +8,4 @@ tensorflow==2.10.0
 pytest==8.3.3
 pylint
 pre-commit
+Flask-WTF==1.2.2
